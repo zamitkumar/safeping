@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SafePing — Emergency QR</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<!-- QRious — lightweight open-source QR library, no dependencies -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+<style>
+/* ═══════════════════════════════════════════════
+   SHARED BASE
+═══════════════════════════════════════════════ */
+:root{
+  --bg:#0a0a0f; --surface:#12121a; --card:#1a1a28; --border:#252538;
+  --accent:#ff4757; --green:#2ed573; --blue:#3d9eff;
+  --text:#e8e8f0; --muted:#5e5e80;
+  --font:'Space Grotesk',sans-serif; --mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--font);color:var(--text);background:var(--bg);min-height:100vh;}
+
+/* ═══════════════════════════════════════════════
+   ① SETUP APP STYLES  (hidden when in scan mode)
+═══════════════════════════════════════════════ */
+#app {
+  background:var(--bg);
+  background-image:radial-gradient(ellipse at 15% 15%,rgba(255,71,87,.07) 0,transparent 55%),
+                   radial-gradient(ellipse at 85% 85%,rgba(61,158,255,.06) 0,transparent 55%);
+}
+header{padding:1.4rem 2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:1rem;}
+.logo{width:36px;height:36px;background:var(--accent);border-radius:9px;display:grid;place-items:center;font-size:1.1rem;flex-shrink:0;}
+header h1{font-size:1.25rem;font-weight:700;letter-spacing:-.03em;}
+header p{font-size:.78rem;color:var(--muted);}
+.wrap{max-width:860px;margin:0 auto;padding:2rem;}
+.tabs{display:flex;gap:.3rem;margin-bottom:2rem;border-bottom:1px solid var(--border);}
+.tab{padding:.6rem 1.2rem;border:none;background:none;color:var(--muted);font-family:var(--font);
+  font-size:.86rem;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .2s;}
+.tab.active{color:var(--text);border-bottom-color:var(--accent);}
+.tab:hover:not(.active){color:var(--text);}
+.panel{display:none;}.panel.active{display:block;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1.5rem;margin-bottom:1.3rem;}
+.card-title{font-size:.92rem;font-weight:600;margin-bottom:1rem;display:flex;align-items:center;gap:.5rem;}
+.badge{font-size:.65rem;padding:.15rem .5rem;border-radius:20px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;}
+.badge-red{background:rgba(255,71,87,.2);color:var(--accent);}
+.badge-blue{background:rgba(61,158,255,.2);color:var(--blue);}
+.badge-green{background:rgba(46,213,115,.2);color:var(--green);}
+label{display:block;font-size:.75rem;color:var(--muted);margin-bottom:.32rem;font-weight:500;letter-spacing:.05em;text-transform:uppercase;}
+input,textarea,select{width:100%;padding:.65rem .85rem;background:var(--surface);border:1px solid var(--border);
+  border-radius:9px;color:var(--text);font-family:var(--font);font-size:.9rem;outline:none;transition:border-color .2s;}
+input:focus,textarea:focus{border-color:var(--accent);}
+textarea{resize:vertical;min-height:68px;}
+.field{margin-bottom:1rem;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:.9rem;}
+@media(max-width:560px){.row2{grid-template-columns:1fr;}}
+.btn{padding:.65rem 1.3rem;border:none;border-radius:9px;font-family:var(--font);font-size:.86rem;font-weight:600;cursor:pointer;transition:all .2s;}
+.btn-red{background:var(--accent);color:#fff;}.btn-red:hover{filter:brightness(1.12);transform:translateY(-1px);}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text);}.btn-ghost:hover{border-color:var(--text);}
+.btn-sm{padding:.38rem .85rem;font-size:.78rem;}
+.bgroup{display:flex;gap:.6rem;flex-wrap:wrap;}
+.stat{display:none;padding:.65rem .9rem;border-radius:9px;font-size:.82rem;margin-bottom:.9rem;}
+.stat.ok{background:rgba(46,213,115,.1);border:1px solid rgba(46,213,115,.3);color:var(--green);display:block;}
+.stat.err{background:rgba(255,71,87,.1);border:1px solid rgba(255,71,87,.3);color:var(--accent);display:block;}
+.info-box{background:rgba(61,158,255,.07);border:1px solid rgba(61,158,255,.22);border-radius:11px;
+  padding:.9rem 1.1rem;font-size:.82rem;color:#8dbfff;line-height:1.65;margin-bottom:1.3rem;}
+.info-box strong{color:var(--blue);}
+
+/* QR output */
+.qr-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.3rem;}
+@media(max-width:560px){.qr-grid{grid-template-columns:1fr;}}
+.qr-card{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:1.4rem;text-align:center;}
+.qr-card h3{font-size:.88rem;font-weight:600;margin-bottom:.2rem;}
+.qr-card p{font-size:.73rem;color:var(--muted);margin-bottom:1rem;}
+.qr-canvas-wrap{display:inline-block;background:#fff;padding:10px;border-radius:8px;margin-bottom:.9rem;}
+
+/* URL display */
+.url-row{display:flex;align-items:center;gap:.5rem;background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;padding:.55rem .8rem;margin-bottom:.7rem;}
+.url-row .url-text{flex:1;font-family:var(--mono);font-size:.7rem;color:var(--blue);word-break:break-all;overflow:hidden;}
+.url-row button{flex-shrink:0;}
+
+/* ═══════════════════════════════════════════════
+   ② EMERGENCY CARD  (shown when scanned)
+═══════════════════════════════════════════════ */
+#emergency {
+  display:none;
+  min-height:100vh;
+  background:linear-gradient(160deg,#120508 0%,#0d0d1f 60%,#08101f 100%);
+  padding:1.5rem 1rem 3rem;
+}
+.ec-inner{max-width:400px;margin:0 auto;text-align:center;}
+.sos-ring{
+  width:80px;height:80px;border-radius:50%;background:var(--accent);
+  display:grid;place-items:center;font-size:2rem;margin:0 auto 1.4rem;
+  box-shadow:0 0 0 0 rgba(255,71,87,.6);
+  animation:sosPulse 1.8s infinite;
+}
+@keyframes sosPulse{
+  0%{box-shadow:0 0 0 0 rgba(255,71,87,.7);}
+  60%{box-shadow:0 0 0 22px rgba(255,71,87,0);}
+  100%{box-shadow:0 0 0 0 rgba(255,71,87,0);}
+}
+.ec-name{font-size:1.7rem;font-weight:700;letter-spacing:-.02em;margin-bottom:.25rem;}
+.ec-sub{font-size:.85rem;color:var(--muted);margin-bottom:1.5rem;}
+.ec-pills{display:flex;flex-wrap:wrap;justify-content:center;gap:.5rem;margin-bottom:1.6rem;}
+.ec-pill{
+  display:inline-flex;align-items:center;gap:.35rem;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
+  border-radius:30px;padding:.38rem .95rem;font-size:.82rem;
+}
+.ec-pill.blood{background:rgba(255,71,87,.12);border-color:rgba(255,71,87,.3);color:#ffaaaa;}
+.ec-pill.allergy{background:rgba(255,165,0,.1);border-color:rgba(255,165,0,.3);color:#ffd080;}
+
+/* call buttons */
+.call-section{margin-bottom:1.5rem;}
+.call-label{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.6rem;}
+.call-btn{
+  display:flex;align-items:center;gap:.8rem;
+  background:var(--accent);color:#fff;
+  padding:1rem 1.4rem;border-radius:50px;
+  font-weight:700;font-size:1rem;
+  width:100%;border:none;font-family:var(--font);
+  cursor:pointer;text-decoration:none;
+  margin-bottom:.55rem;transition:all .2s;
+  box-shadow:0 4px 20px rgba(255,71,87,.3);
+}
+.call-btn:hover,.call-btn:active{filter:brightness(1.12);transform:scale(1.02);}
+.call-btn.sec{
+  background:rgba(255,71,87,.13);
+  border:1px solid rgba(255,71,87,.35);
+  box-shadow:none;
+}
+.call-btn .phone-icon{font-size:1.3rem;flex-shrink:0;}
+.call-btn .contact-name{flex:1;text-align:left;font-size:.95rem;}
+.call-btn .contact-num{
+  font-family:var(--mono);font-size:.72rem;
+  background:rgba(0,0,0,.3);border-radius:5px;
+  padding:.18rem .45rem;color:rgba(255,255,255,.55);
+  letter-spacing:.06em;flex-shrink:0;
+}
+
+/* private unlock */
+.ec-divider{border:none;border-top:1px solid rgba(255,255,255,.06);margin:1.5rem 0;}
+.unlock-section{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:1.3rem;}
+.unlock-section h4{font-size:.85rem;margin-bottom:.3rem;}
+.unlock-section p{font-size:.75rem;color:var(--muted);margin-bottom:1rem;}
+.pin-row{display:flex;gap:.5rem;}
+.pin-row input{
+  flex:1;font-family:var(--mono);font-size:1.3rem;letter-spacing:.4rem;
+  text-align:center;background:var(--surface);border:1px solid var(--border);
+  border-radius:9px;color:var(--text);padding:.6rem;
+}
+.pin-row button{padding:.6rem 1.1rem;border:none;border-radius:9px;background:var(--accent);
+  color:#fff;font-family:var(--font);font-weight:700;cursor:pointer;white-space:nowrap;}
+.pin-err{color:var(--accent);font-size:.75rem;margin-top:.45rem;display:none;}
+.medical-table{width:100%;text-align:left;margin-top:1rem;border-collapse:collapse;}
+.medical-table tr{border-bottom:1px solid rgba(255,255,255,.05);}
+.medical-table tr:last-child{border-bottom:none;}
+.medical-table td{padding:.6rem .2rem;font-size:.83rem;}
+.medical-table td:first-child{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;width:40%;vertical-align:top;padding-top:.7rem;}
+.medical-table td:last-child{font-weight:600;font-family:var(--mono);}
+.ec-footer{font-size:.68rem;color:rgba(255,255,255,.2);margin-top:2rem;line-height:1.6;}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     EMERGENCY CARD VIEW  (shown when scanned)
+══════════════════════════════════════════════ -->
+<div id="emergency">
+  <div class="ec-inner">
+    <div class="sos-ring">🆘</div>
+    <div class="ec-name" id="ec-name">—</div>
+    <div class="ec-sub" id="ec-sub">Emergency Contact Card</div>
+
+    <div class="ec-pills" id="ec-pills"></div>
+
+    <div class="call-section" id="ec-contacts"></div>
+
+    <hr class="ec-divider">
+
+    <!-- Private unlock -->
+    <div class="unlock-section" id="unlock-wrap">
+      <h4>🔒 Full Medical Profile</h4>
+      <p>Enter PIN to unlock medications, conditions & doctor info</p>
+      <div class="pin-row">
+        <input type="password" id="ec-pin" placeholder="••••" maxlength="8"
+          onkeyup="if(event.key==='Enter')ecUnlock()">
+        <button onclick="ecUnlock()">Unlock</button>
+      </div>
+      <div class="pin-err" id="ec-pin-err">❌ Incorrect PIN</div>
+    </div>
+
+    <div id="ec-medical" style="display:none">
+      <table class="medical-table" id="ec-med-table"></table>
+    </div>
+
+    <div class="ec-footer">
+      Powered by SafePing · Data stored in URL · No server involved
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SETUP APP  (shown normally)
+══════════════════════════════════════════════ -->
+<div id="app">
+  <header>
+    <div class="logo">🆘</div>
+    <div>
+      <h1>SafePing</h1>
+      <p>Emergency QR — data lives in the URL, opens clean on any phone</p>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('setup')">⚙️ Setup</button>
+      <button class="tab" onclick="switchTab('qr')">📱 QR Codes</button>
+      <button class="tab" onclick="switchTab('preview')">👁 Preview</button>
+    </div>
+
+    <!-- ── SETUP ── -->
+    <div class="panel active" id="panel-setup">
+      <div class="info-box">
+        <strong>🔗 How it works:</strong> Your data is encoded into the URL itself (as a hash fragment). The QR code points to <strong>this same page</strong> hosted online. When scanned, the page detects it was opened via QR and shows <strong>only the clean emergency card</strong> — no setup UI, just the contacts and call buttons.
+        <br><br>
+        <strong>⚡ Required:</strong> Host this file on GitHub Pages or Netlify so the QR URL is a real <code>https://</code> link that phone cameras can open.
+      </div>
+
+      <div id="setup-stat" class="stat"></div>
+
+      <div class="card">
+        <div class="card-title">👤 Personal Info <span class="badge badge-green">Required</span></div>
+        <div class="row2">
+          <div class="field"><label>Full Name</label><input id="f-name" placeholder="Jane Doe"></div>
+          <div class="field"><label>Date of Birth</label><input type="date" id="f-dob"></div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Blood Type</label>
+            <select id="f-blood">
+              <option value="">Unknown</option>
+              <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
+              <option>AB+</option><option>AB-</option><option>O+</option><option>O-</option>
+            </select>
+          </div>
+          <div class="field"><label>Known Allergies</label><input id="f-allergy" placeholder="Penicillin, nuts..."></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📞 Emergency Contacts <span class="badge badge-red">Critical</span></div>
+        <div class="row2">
+          <div class="field"><label>Contact 1 Name</label><input id="f-c1n" placeholder="Mom / John"></div>
+          <div class="field"><label>Contact 1 Phone</label><input type="tel" id="f-c1p" placeholder="+49 170 123 4567"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Contact 2 Name</label><input id="f-c2n" placeholder="Partner / Doctor"></div>
+          <div class="field"><label>Contact 2 Phone</label><input type="tel" id="f-c2p" placeholder="+49 170 765 4321"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🏥 Medical Info <span class="badge badge-blue">PIN protected</span></div>
+        <div class="field"><label>Medications</label><input id="f-meds" placeholder="Metformin 500mg, Lisinopril 10mg..."></div>
+        <div class="field"><label>Medical Conditions</label><textarea id="f-cond" placeholder="Diabetes Type 2, heart condition..."></textarea></div>
+        <div class="field"><label>Doctor / Hospital</label><input id="f-doc" placeholder="Dr. Müller — Charité Berlin"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🔐 Private PIN <span class="badge badge-red">Protects medical info</span></div>
+        <p style="color:var(--muted);font-size:.82rem;margin-bottom:1rem;">Contacts & name are always visible. Medical details require this PIN.</p>
+        <div class="row2">
+          <div class="field"><label>Set PIN (4–8 digits)</label><input type="password" id="f-pin" placeholder="••••" maxlength="8"></div>
+          <div class="field"><label>Confirm PIN</label><input type="password" id="f-pin2" placeholder="••••" maxlength="8"></div>
+        </div>
+      </div>
+
+      <div class="bgroup">
+        <button class="btn btn-red" onclick="generate()">⚡ Generate QR Codes</button>
+        <button class="btn btn-ghost" onclick="clearAll()">🗑 Clear</button>
+      </div>
+    </div>
+
+    <!-- ── QR CODES ── -->
+    <div class="panel" id="panel-qr">
+      <div class="qr-grid">
+        <div class="qr-card">
+          <h3>🌐 Public QR</h3>
+          <p>Scan → instant emergency card, no PIN</p>
+          <div class="qr-canvas-wrap"><canvas id="qr-pub"></canvas></div>
+          <div class="url-row">
+            <span class="url-text" id="url-pub">—</span>
+            <button class="btn btn-ghost btn-sm" onclick="copyUrl('pub')">Copy</button>
+          </div>
+          <div class="bgroup" style="justify-content:center">
+            <button class="btn btn-ghost btn-sm" onclick="dlQR('pub')">⬇ Download PNG</button>
+          </div>
+        </div>
+        <div class="qr-card">
+          <h3>🔒 Private QR</h3>
+          <p>Scan → emergency card + PIN unlocks medical info</p>
+          <div class="qr-canvas-wrap"><canvas id="qr-priv"></canvas></div>
+          <div class="url-row">
+            <span class="url-text" id="url-priv">—</span>
+            <button class="btn btn-ghost btn-sm" onclick="copyUrl('priv')">Copy</button>
+          </div>
+          <div class="bgroup" style="justify-content:center">
+            <button class="btn btn-ghost btn-sm" onclick="dlQR('priv')">⬇ Download PNG</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-box" style="margin-top:.5rem">
+        💡 <strong>Upload this file to GitHub Pages or Netlify first</strong>, then come back and generate — the QR will use your live URL so any phone camera can open it directly.<br><br>
+        📌 <strong>Print the Public QR</strong> on your helmet, wallet, sports band. <strong>Give the Private QR</strong> to your doctor. When scanned, only the clean emergency card appears — not this setup page.
+      </div>
+    </div>
+
+    <!-- ── PREVIEW ── -->
+    <div class="panel" id="panel-preview">
+      <p style="color:var(--muted);font-size:.82rem;text-align:center;margin-bottom:1.3rem">
+        📱 Exact view when someone scans your QR on their phone
+      </p>
+      <!-- reuse the same emergency card styles in an iframe-like preview -->
+      <div style="background:linear-gradient(160deg,#120508 0%,#0d0d1f 60%,#08101f 100%);border-radius:20px;padding:1.5rem 1rem 2rem;max-width:400px;margin:0 auto;">
+        <div style="text-align:center">
+          <div class="sos-ring" style="margin-bottom:1.2rem">🆘</div>
+          <div class="ec-name" id="pv-name">—</div>
+          <div class="ec-sub" id="pv-sub">Emergency Contact Card</div>
+          <div class="ec-pills" id="pv-pills"></div>
+          <div class="call-section" id="pv-contacts"></div>
+          <div style="font-size:.7rem;color:rgba(255,255,255,.2);margin-top:1rem">
+            🔒 Numbers hidden · tap to call · medical info PIN-protected
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /wrap -->
+</div><!-- /app -->
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  UTILITIES
+// ═══════════════════════════════════════════════════════
+function simpleHash(s){
+  let h=0;
+  for(let i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0;}
+  return Math.abs(h).toString(36);
+}
+
+function scramble(p){
+  const pfx=p.startsWith('+')?'+':'';
+  const d=p.replace(/\D/g,'');
+  if(d.length<5)return '●●●●●';
+  return `${pfx}${d.slice(0,3)} ${'●'.repeat(Math.max(d.length-5,3))} ${d.slice(-2)}`;
+}
+
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(e=>e.classList.remove('active'));
+  document.getElementById('panel-'+t).classList.add('active');
+  const idx=['setup','qr','preview'].indexOf(t);
+  document.querySelectorAll('.tab')[idx]?.classList.add('active');
+}
+
+function setStatus(type,msg){
+  const el=document.getElementById('setup-stat');
+  el.className='stat '+type; el.textContent=msg;
+  if(type==='ok')setTimeout(()=>el.className='stat',5000);
+}
+
+// ═══════════════════════════════════════════════════════
+//  ENCODE / DECODE DATA IN URL HASH
+//  Format: base64( JSON({name,dob,blood,allergy,c1n,c1p,c2n,c2p,meds,cond,doc,ph,mode}) )
+//  mode: 'pub' = public (no medical), 'priv' = private (has medical + pin hash)
+// ═══════════════════════════════════════════════════════
+function encodeData(obj){
+  return btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
+}
+function decodeData(str){
+  try{ return JSON.parse(decodeURIComponent(escape(atob(str)))); }
+  catch(e){ return null; }
+}
+
+// ═══════════════════════════════════════════════════════
+//  GENERATE QR CODES
+// ═══════════════════════════════════════════════════════
+let currentData = null;
+
+function generate(){
+  const name  = document.getElementById('f-name').value.trim();
+  const c1p   = document.getElementById('f-c1p').value.trim();
+  const pin   = document.getElementById('f-pin').value.trim();
+  const pin2  = document.getElementById('f-pin2').value.trim();
+
+  if(!name)   return setStatus('err','⚠️ Full name is required.');
+  if(!c1p)    return setStatus('err','⚠️ Primary emergency phone is required.');
+  if(!pin||pin.length<4) return setStatus('err','⚠️ PIN must be at least 4 digits.');
+  if(pin!==pin2) return setStatus('err','⚠️ PINs do not match.');
+
+  const base = {
+    n:  name,
+    db: document.getElementById('f-dob').value,
+    bl: document.getElementById('f-blood').value,
+    al: document.getElementById('f-allergy').value,
+    c1n:document.getElementById('f-c1n').value.trim(),
+    c1p,
+    c2n:document.getElementById('f-c2n').value.trim(),
+    c2p:document.getElementById('f-c2p').value.trim(),
+  };
+
+  // Public payload — no medical info
+  const pubPayload  = encodeData({...base, m:'pub'});
+  // Private payload — includes medical + pin hash
+  const privPayload = encodeData({
+    ...base,
+    md: document.getElementById('f-meds').value,
+    cd: document.getElementById('f-cond').value,
+    dr: document.getElementById('f-doc').value,
+    ph: simpleHash(pin),
+    m:'priv'
+  });
+
+  const base_url = window.location.href.split('#')[0];
+  const pubUrl   = base_url + '#pub:' + pubPayload;
+  const privUrl  = base_url + '#priv:' + privPayload;
+
+  currentData = { pubUrl, privUrl, base };
+
+  // Render QR codes using QRious
+  makeQR('qr-pub',  pubUrl);
+  makeQR('qr-priv', privUrl);
+
+  document.getElementById('url-pub').textContent  = pubUrl;
+  document.getElementById('url-priv').textContent = privUrl;
+
+  updatePreview(base);
+  setStatus('ok','✅ QR codes ready! Go to the QR Codes tab to download.');
+  setTimeout(()=>switchTab('qr'), 1000);
+}
+
+function makeQR(canvasId, text){
+  new QRious({
+    element: document.getElementById(canvasId),
+    value: text,
+    size: 200,
+    level: 'M',           // Medium error correction — smaller QR
+    foreground: '#000000',
+    background: '#ffffff',
+    padding: 10
+  });
+}
+
+function dlQR(type){
+  const canvas = document.getElementById('qr-'+type);
+  if(!canvas.toDataURL) return alert('Generate QR first.');
+  const a=document.createElement('a');
+  a.download=`safeping-${type==='pub'?'public':'private'}-qr.png`;
+  a.href=canvas.toDataURL('image/png');
+  a.click();
+}
+
+function copyUrl(type){
+  const txt = document.getElementById('url-'+type).textContent;
+  navigator.clipboard.writeText(txt).then(()=>setStatus('ok','✅ URL copied to clipboard!'));
+}
+
+function clearAll(){
+  if(!confirm('Clear all fields?'))return;
+  document.querySelectorAll('#panel-setup input,#panel-setup textarea,#panel-setup select')
+    .forEach(el=>el.value=el.tagName==='SELECT'?'':'');
+  currentData=null;
+}
+
+// ═══════════════════════════════════════════════════════
+//  PREVIEW TAB
+// ═══════════════════════════════════════════════════════
+function updatePreview(d){
+  document.getElementById('pv-name').textContent = d.n;
+  document.getElementById('pv-sub').textContent  = d.db ? 'DOB: '+d.db : 'Emergency Contact Card';
+
+  const pillsEl = document.getElementById('pv-pills');
+  pillsEl.innerHTML = '';
+  if(d.bl)  pillsEl.innerHTML += `<span class="ec-pill blood">🩸 ${d.bl}</span>`;
+  if(d.al)  pillsEl.innerHTML += `<span class="ec-pill allergy">⚠️ ${d.al}</span>`;
+
+  const cEl = document.getElementById('pv-contacts');
+  cEl.innerHTML = '';
+  cEl.innerHTML += buildCallBtn(d.c1n||'Contact 1', d.c1p, false);
+  if(d.c2p) cEl.innerHTML += buildCallBtn(d.c2n||'Contact 2', d.c2p, true);
+}
+
+function buildCallBtn(name, phone, secondary){
+  const masked = scramble(phone);
+  const cls    = secondary ? 'call-btn sec' : 'call-btn';
+  const icon   = secondary ? '📲' : '📞';
+  return `<a class="${cls}" href="tel:${phone}">
+    <span class="phone-icon">${icon}</span>
+    <span class="contact-name">${name}</span>
+    <span class="contact-num">${masked}</span>
+  </a>`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  EMERGENCY CARD  — triggered when URL has #pub: or #priv:
+// ═══════════════════════════════════════════════════════
+function showEmergencyCard(){
+  const hash = window.location.hash.slice(1); // remove #
+  if(!hash || (!hash.startsWith('pub:') && !hash.startsWith('priv:'))) return;
+
+  // Hide setup, show emergency card
+  document.getElementById('app').style.display='none';
+  document.getElementById('emergency').style.display='block';
+
+  const mode    = hash.startsWith('pub:') ? 'pub' : 'priv';
+  const payload = hash.slice(4); // remove 'pub:' or 'priv:'
+  const d       = decodeData(payload);
+
+  if(!d){ document.getElementById('ec-name').textContent='⚠️ Invalid QR code'; return; }
+
+  // Set page title
+  document.title = '🆘 Emergency — ' + d.n;
+
+  // Name & sub
+  document.getElementById('ec-name').textContent = d.n;
+  document.getElementById('ec-sub').textContent  = d.db ? 'DOB: '+d.db : 'Emergency Contact Card';
+
+  // Pills
+  const pillsEl = document.getElementById('ec-pills');
+  if(d.bl)  pillsEl.innerHTML += `<span class="ec-pill blood">🩸 ${d.bl}</span>`;
+  if(d.al)  pillsEl.innerHTML += `<span class="ec-pill allergy">⚠️ ${d.al}</span>`;
+  if(!d.bl && !d.al) pillsEl.style.display='none';
+
+  // Contact buttons
+  const contactsEl = document.getElementById('ec-contacts');
+  contactsEl.innerHTML = `<div class="call-label">Tap to call immediately</div>`;
+  contactsEl.innerHTML += buildCallBtn(d.c1n||'Emergency Contact 1', d.c1p, false);
+  if(d.c2p) contactsEl.innerHTML += buildCallBtn(d.c2n||'Emergency Contact 2', d.c2p, true);
+
+  // Private mode — show unlock section
+  if(mode==='priv' && d.ph){
+    window._privData = d; // store for PIN check
+    document.getElementById('unlock-wrap').style.display='block';
+  } else {
+    document.getElementById('unlock-wrap').style.display='none';
+  }
+}
+
+function ecUnlock(){
+  const d     = window._privData;
+  const pin   = document.getElementById('ec-pin').value;
+  const err   = document.getElementById('ec-pin-err');
+  const table = document.getElementById('ec-med-table');
+  const wrap  = document.getElementById('ec-medical');
+
+  if(!d){ err.textContent='⚠️ No data'; err.style.display='block'; return; }
+
+  if(simpleHash(pin) === d.ph){
+    err.style.display='none';
+    document.getElementById('unlock-wrap').style.display='none';
+
+    const rows=[
+      ['Medications', d.md||'—'],
+      ['Conditions',  d.cd||'—'],
+      ['Doctor',      d.dr||'—'],
+      ['Contact 1',   (d.c1n||'')+(d.c1n?' — ':'')+d.c1p],
+      ['Contact 2',   d.c2p ? (d.c2n||'')+(d.c2n?' — ':'')+d.c2p : '—'],
+    ];
+    table.innerHTML = rows.map(([k,v])=>
+      `<tr><td>${k}</td><td>${v}</td></tr>`
+    ).join('');
+    wrap.style.display='block';
+  } else {
+    err.style.display='block';
+    err.textContent='❌ Incorrect PIN. Try again.';
+    document.getElementById('ec-pin').value='';
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  BOOT — check URL on load
+// ═══════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', showEmergencyCard);
+</script>
+</body>
+</html>
