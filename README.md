@@ -1,0 +1,2 @@
+# safeping
+emergency-qr
